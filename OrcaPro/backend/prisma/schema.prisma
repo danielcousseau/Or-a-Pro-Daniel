@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// --- Nossas Tabelas do Banco de Dados ---
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  usuario   String   @unique
+  email     String?  @unique
+  avatar    String?
+  password  String
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relacionamentos: O que pertence a este usuário
+  clientes   Cliente[]
+  materiais  Material[]
+  orcamentos Orcamento[]
+  auditLogs  AuditLog[]
+}
+
+model Cliente {
+  id          Int      @id @default(autoincrement())
+  nome        String
+  cpfCnpj     String?
+  email       String?
+  telefone    String
+  cidade      String?
+  bairro      String?
+  rua         String?
+  numero      String?
+  cep         String?
+  observacoes String?
+  createdAt   DateTime @default(now())
+  orcamentos  Orcamento[]
+
+  // Etiqueta de dono (SaaS)
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Material {
+  id          Int      @id @default(autoincrement())
+  nome        String
+  categoria   String?
+  valor       Float
+  unidade     String?
+  createdAt   DateTime @default(now())
+
+  // Etiqueta de dono (SaaS)
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Orcamento {
+  id              Int      @id @default(autoincrement())
+  titulo          String
+  clienteId       Int
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  
+  tipoMaoDeObra   String   
+  maoDeObraValor  Float
+  maoDeObraQtde   Float?   @default(1)
+  tipoLucro       String   
+  lucroValor      Float
+  lucroQtde       Float?   @default(1)
+  totalFinal      Float
+  status          String   @default("Aguardando")
+  
+  tipoMovel       String?
+  ambiente        String?
+  medidas         String?
+  prazo           String?
+  pagamento       String?
+  validade        String?
+  observacoes     String?
+  
+  materiais       OrcamentoMaterial[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Etiqueta de dono (SaaS)
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OrcamentoMaterial {
+  id          Int       @id @default(autoincrement())
+  orcamentoId Int
+  orcamento   Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  nome        String
+  valor       Float
+  quantidade  Float
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  acao      String
+  recurso   String
+  recursoId Int?
+  detalhe   String?
+  criadoEm  DateTime @default(now())
+
+  @@index([userId])
+  @@index([criadoEm])
+}

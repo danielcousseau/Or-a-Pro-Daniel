@@ -1,0 +1,285 @@
+import { useState, useEffect } from 'react';
+import api from '../services/api';
+import { toast } from 'react-toastify';
+import { formatarMoeda } from '../utils/format';
+import { mascaraMoeda, desmascararMoeda } from '../utils/masks';
+
+const CATEGORIAS_PADRAO = ['Chapas', 'Fixação', 'Ferragens', 'Acabamento'];
+const UNIDADES_PADRAO = ['Chapa', 'Unidade', 'Metro', 'Metro Linear', 'Metro Quadrado', 'Caixa', 'Par', 'Rolo', 'Litro', 'Kg'];
+
+export default function Materiais() {
+    const [materiais, setMateriais] = useState([]);
+    const [materialEmEdicao, setMaterialEmEdicao] = useState(null);
+    const [materialParaExcluir, setMaterialParaExcluir] = useState(null);
+    const [abaAtiva, setAbaAtiva] = useState('consulta'); // 'consulta' ou 'cadastro'
+    const [termoBusca, setTermoBusca] = useState(''); // Guarda o texto da pesquisa
+    const [salvando, setSalvando] = useState(false);
+    const [usandoOutrosCategoria, setUsandoOutrosCategoria] = useState(false);
+    const [usandoOutrosUnidade, setUsandoOutrosUnidade] = useState(false);
+
+    const [formData, setFormData] = useState({
+        nome: '',
+        categoria: '',
+        valor: '',
+        unidade: ''
+    });
+
+    useEffect(() => {
+        carregarMateriais();
+    }, []);
+
+    const carregarMateriais = async () => {
+        try {
+            const response = await api.get('/materiais');
+            setMateriais(response.data);
+        } catch (error) {
+            console.error("Erro ao carregar materiais", error);
+        }
+    };
+
+    const handleChange = (e) => {
+        let { name, value } = e.target;
+        
+        // Aplica a máscara se o campo for 'valor'
+        if (name === 'valor') value = mascaraMoeda(value);
+        
+        setFormData({ ...formData, [name]: value });
+    };
+
+    const limparFormulario = () => {
+        setFormData({ nome: '', categoria: '', valor: '', unidade: '' });
+        setMaterialEmEdicao(null);
+        setUsandoOutrosCategoria(false);
+        setUsandoOutrosUnidade(false);
+    };
+
+    const handleCategoriaChange = (e) => {
+        if (e.target.value === 'Outros') {
+            setUsandoOutrosCategoria(true);
+            setFormData(prev => ({ ...prev, categoria: '' }));
+        } else {
+            setUsandoOutrosCategoria(false);
+            setFormData(prev => ({ ...prev, categoria: e.target.value }));
+        }
+    };
+
+    const handleUnidadeChange = (e) => {
+        if (e.target.value === 'Outros') {
+            setUsandoOutrosUnidade(true);
+            setFormData(prev => ({ ...prev, unidade: '' }));
+        } else {
+            setUsandoOutrosUnidade(false);
+            setFormData(prev => ({ ...prev, unidade: e.target.value }));
+        }
+    };
+
+    const handleEditar = (material) => {
+        const isCustomCategoria = Boolean(material.categoria && !CATEGORIAS_PADRAO.includes(material.categoria));
+        const isCustomUnidade = Boolean(material.unidade && !UNIDADES_PADRAO.includes(material.unidade));
+        setMaterialEmEdicao(material);
+        setUsandoOutrosCategoria(isCustomCategoria);
+        setUsandoOutrosUnidade(isCustomUnidade);
+        setFormData({
+            nome: material.nome || '',
+            categoria: material.categoria || '',
+            valor: mascaraMoeda(material.valor) || '', // Já traz do banco formatado
+            unidade: material.unidade || ''
+        });
+        setAbaAtiva('cadastro'); // Muda para aba de cadastro automaticamente
+        window.scrollTo(0, 0); // Rola para o topo do formulário
+    };
+
+    const confirmarExclusao = async () => {
+        if (!materialParaExcluir) return;
+        try {
+            await api.delete(`/materiais/${materialParaExcluir}`);
+            toast.success('Material excluído com sucesso!');
+            setMaterialParaExcluir(null);
+            carregarMateriais();
+        } catch (error) {
+            toast.error('Erro ao excluir material.');
+            setMaterialParaExcluir(null);
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        
+        if (salvando) return;
+        setSalvando(true);
+        
+        try {
+            const dadosParaEnviar = {
+                ...formData,
+                valor: desmascararMoeda(formData.valor) // Limpa o "R$" antes de mandar pro banco
+            };
+
+            if (materialEmEdicao) {
+                await api.put(`/materiais/${materialEmEdicao.id}`, dadosParaEnviar);
+            } else {
+                await api.post('/materiais', dadosParaEnviar);
+            }
+
+            toast.success(`Material ${materialEmEdicao ? 'atualizado' : 'salvo'} com sucesso!`);
+            limparFormulario();
+            carregarMateriais();
+            setAbaAtiva('consulta'); // Volta pra lista após salvar
+        } catch (error) {
+            console.error("Erro detalhado do backend:", error.response?.data || error.message);
+            toast.error('Erro ao salvar material. Verifique o console.');
+        } finally {
+            setSalvando(false);
+        }
+    };
+
+    // Filtra os materiais com base na barra de pesquisa
+    const materiaisFiltrados = materiais.filter(material => {
+        const termo = termoBusca.toLowerCase();
+        return (
+            (material.nome && material.nome.toLowerCase().includes(termo)) ||
+            (material.categoria && material.categoria.toLowerCase().includes(termo))
+        );
+    });
+
+    return (
+        <div>
+            <div className="page-header">
+                <h1>Gestão de Materiais</h1>
+                <div className="tabs">
+                    <button type="button" className={`tab-btn ${abaAtiva === 'consulta' ? 'ativo' : ''}`} onClick={() => { setAbaAtiva('consulta'); limparFormulario(); }}>
+                        Lista
+                    </button>
+                    <button type="button" className={`tab-btn ${abaAtiva === 'cadastro' ? 'ativo' : ''}`} onClick={() => { setAbaAtiva('cadastro'); limparFormulario(); }}>
+                        Novo Material
+                    </button>
+                </div>
+            </div>
+
+            {/* CONTEÚDO DA ABA DE CADASTRO */}
+            {abaAtiva === 'cadastro' && (
+                <div>
+                    <h2 style={{ marginBottom: '20px', color: 'var(--text-main)', borderBottom: '2px solid var(--border)', paddingBottom: '10px' }}>
+                        {materialEmEdicao ? 'Editar Material' : 'Cadastro de Materiais'}
+                    </h2>
+                    <form onSubmit={handleSubmit}>
+                        <div className="cliente-card">
+                            <div className="form-grid-2-1">
+                                <section className="form-section">
+                                    <label>Nome do Material *</label>
+                                    <input type="text" name="nome" value={formData.nome} onChange={handleChange} required placeholder="Ex: MDF Branco TX 15mm" />
+                                </section>
+                                <section className="form-section">
+                                    <label>Categoria</label>
+                                    <select name="categoria" value={usandoOutrosCategoria ? 'Outros' : (formData.categoria || '')} onChange={handleCategoriaChange}>
+                                        <option value="">Selecione uma categoria...</option>
+                                        {CATEGORIAS_PADRAO.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                        <option value="Outros">Outros...</option>
+                                    </select>
+                                    {usandoOutrosCategoria && (
+                                        <input
+                                            type="text"
+                                            name="categoria"
+                                            value={formData.categoria}
+                                            onChange={handleChange}
+                                            placeholder="Descreva a categoria..."
+                                            style={{ marginTop: '8px' }}
+                                            autoFocus
+                                        />
+                                    )}
+                                </section>
+                            </div>
+
+                            <div className="form-grid-1-1">
+                                <section className="form-section">
+                                    <label>Valor (R$) *</label>
+                                    <input type="text" name="valor" value={formData.valor} onChange={handleChange} required placeholder="R$ 0,00" onFocus={(e) => e.target.select()} />
+                                </section>
+                                <section className="form-section">
+                                    <label>Unidade de Medida</label>
+                                    <select name="unidade" value={usandoOutrosUnidade ? 'Outros' : (formData.unidade || '')} onChange={handleUnidadeChange}>
+                                        <option value="">Selecione uma unidade...</option>
+                                        {UNIDADES_PADRAO.map(un => <option key={un} value={un}>{un}</option>)}
+                                        <option value="Outros">Outros...</option>
+                                    </select>
+                                    {usandoOutrosUnidade && (
+                                        <input
+                                            type="text"
+                                            name="unidade"
+                                            value={formData.unidade}
+                                            onChange={handleChange}
+                                            placeholder="Descreva a unidade..."
+                                            style={{ marginTop: '8px' }}
+                                            autoFocus
+                                        />
+                                    )}
+                                </section>
+                            </div>
+
+                            <div className="form-buttons">
+                                <button type="submit" disabled={salvando} style={{ opacity: salvando ? 0.7 : 1, cursor: salvando ? 'not-allowed' : 'pointer' }}>
+                                    {salvando ? 'Salvando...' : (materialEmEdicao ? 'Atualizar Material' : 'Salvar Material')}
+                                </button>
+                                <button type="button" className="btn-cancel" disabled={salvando} onClick={() => { limparFormulario(); setAbaAtiva('consulta'); }}>
+                                    {materialEmEdicao ? 'Cancelar Edição' : 'Cancelar'}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {/* CONTEÚDO DA ABA DE CONSULTA */}
+            {abaAtiva === 'consulta' && (
+                <section className="lista-clientes">
+                    <div className="search-bar">
+                        <h2>{materiaisFiltrados.length} {materiaisFiltrados.length !== 1 ? 'materiais' : 'material'}</h2>
+                        <input
+                            type="text"
+                            placeholder="Pesquisar por nome ou categoria..."
+                            value={termoBusca}
+                            onChange={(e) => setTermoBusca(e.target.value)}
+                        />
+                    </div>
+
+                    <div id="listaMateriais">
+                        {materiaisFiltrados.length === 0 ? (
+                            <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-soft)' }}>
+                                Nenhum material encontrado.
+                            </p>
+                        ) : (
+                            <div className="grid-cards">
+                                {materiaisFiltrados.map((material) => (
+                                <div key={material.id} className="cliente-card highlight-primary">
+                                    <h3 style={{ margin: '0 0 10px 0', fontSize: '1.1rem' }}>{material.nome}</h3>
+                                        <p style={{ margin: '4px 0' }}><strong>Valor:</strong> {formatarMoeda(material.valor)}</p>
+                                    <p style={{ margin: '4px 0' }}><strong>Categoria:</strong> {material.categoria || 'Não informada'}</p>
+                                    <p style={{ margin: '4px 0' }}><strong>Unidade:</strong> {material.unidade || 'Não informada'}</p>
+                                    
+                                    <div className="card-actions" style={{ marginTop: '15px' }}>
+                                        <button type="button" className="btn-action btn-edit" onClick={() => handleEditar(material)}>Editar</button>
+                                        <button type="button" className="btn-action btn-delete" onClick={() => setMaterialParaExcluir(material.id)}>Excluir</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    </div>
+                </section>
+            )}
+
+            {/* Modal de Confirmação de Exclusão */}
+            {materialParaExcluir && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h3>Confirmar Exclusão</h3>
+                        <p>Tem certeza que deseja excluir este material?</p>
+                        <div className="modal-actions">
+                            <button type="button" className="btn-cancel" onClick={() => setMaterialParaExcluir(null)}>Cancelar</button>
+                            <button type="button" className="btn-delete" onClick={confirmarExclusao}>Sim, Excluir</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
