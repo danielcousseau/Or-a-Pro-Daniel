@@ -8,8 +8,17 @@ if (missingEnv.length > 0) {
 }
 
 const app = require('./app');
+const seedAdmin = require('./utils/seedAdmin');
 
 const PORT = process.env.PORT || 3333;
-app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-});
+
+seedAdmin()
+    .then(() => {
+        app.listen(PORT, () => {
+            console.log(`Servidor rodando na porta ${PORT}`);
+        });
+    })
+    .catch(err => {
+        console.error('Erro ao verificar/criar admin:', err);
+        process.exit(1);
+    });

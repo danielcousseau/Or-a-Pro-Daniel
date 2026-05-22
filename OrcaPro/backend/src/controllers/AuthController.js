@@ -54,7 +54,7 @@ module.exports = {
 
             // Tokens também no body: necessário para Safari/iOS (ITP bloqueia cookies cross-domain)
             return res.json({
-                user: { id: user.id, usuario: user.usuario, nome: user.name, email: user.email, avatar: user.avatar || null },
+                user: { id: user.id, usuario: user.usuario, nome: user.name, email: user.email, avatar: user.avatar || null, isAdmin: user.isAdmin },
                 accessToken,
                 refreshToken,
             });
@@ -90,10 +90,10 @@ module.exports = {
         try {
             const user = await prisma.user.findUnique({
                 where: { id: req.userId },
-                select: { id: true, usuario: true, name: true, email: true, avatar: true }
+                select: { id: true, usuario: true, name: true, email: true, avatar: true, isAdmin: true }
             });
             if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
-            return res.json({ id: user.id, usuario: user.usuario, nome: user.name, email: user.email, avatar: user.avatar || null });
+            return res.json({ id: user.id, usuario: user.usuario, nome: user.name, email: user.email, avatar: user.avatar || null, isAdmin: user.isAdmin });
         } catch (error) {
             console.error(error);
             return res.status(500).json({ error: 'Erro interno no servidor' });
@@ -206,7 +206,7 @@ module.exports = {
             const resetSecret = process.env.JWT_SECRET + user.password;
             const resetToken = jwt.sign({ userId: user.id }, resetSecret, { expiresIn: '1h' });
 
-            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',')[0].trim();
             const linkReset = `${frontendUrl}/redefinir-senha?token=${resetToken}&id=${user.id}`;
 
             await enviarEmailResetSenha(user.email, user.name, linkReset);
