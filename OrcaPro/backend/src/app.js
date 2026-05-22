@@ -7,9 +7,18 @@ const cookieParser = require('cookie-parser');
 const app = express();
 app.set('trust proxy', 1);
 
-const allowedOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
+    .split(',')
+    .map(u => u.trim());
+
 app.use(cors({
-    origin: allowedOrigin,
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     optionsSuccessStatus: 200,
 }));
