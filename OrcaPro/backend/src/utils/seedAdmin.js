@@ -9,9 +9,34 @@ module.exports = async function seedAdmin() {
         return;
     }
 
-    const exists = await prisma.user.findFirst({ where: { isAdmin: true } });
-    if (exists) return;
+    // Busca por email primeiro; se não tiver email, busca por username
+    const existente = ADMIN_EMAIL
+        ? await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } })
+        : await prisma.user.findUnique({ where: { usuario: ADMIN_USERNAME } });
 
+    if (existente) {
+        const data = { isAdmin: true };
+
+        if (ADMIN_PASSWORD) {
+            data.password = await bcrypt.hash(ADMIN_PASSWORD, 10);
+        }
+
+        if (ADMIN_NAME) {
+            data.name = ADMIN_NAME;
+        }
+
+        // Atualiza username só se for diferente e não houver conflito
+        if (ADMIN_USERNAME && existente.usuario !== ADMIN_USERNAME) {
+            const conflito = await prisma.user.findUnique({ where: { usuario: ADMIN_USERNAME } });
+            if (!conflito) data.usuario = ADMIN_USERNAME;
+        }
+
+        await prisma.user.update({ where: { id: existente.id }, data });
+        console.log(`✅ Usuário existente promovido a admin: ${existente.usuario}`);
+        return;
+    }
+
+    // Usuário não existe — cria normalmente
     const hash = await bcrypt.hash(ADMIN_PASSWORD, 10);
     await prisma.user.create({
         data: {
